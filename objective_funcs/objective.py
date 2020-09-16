@@ -49,7 +49,8 @@ class TuneNN(object):
         self.bo_method = bo_method
         self.task = task
         self.seed = seed
-        # Load and process data
+
+        # TODO Load and process data
         # self.input_size = len(data.columns)
         # self.X_train, self.Y_train, self.X_valid, self.Y_valid =
 
@@ -67,11 +68,13 @@ class TuneNN(object):
         optimizer = optim.Adam(net.parameters(), lr=np.exp(config['lr']), weight_decay=np.exp(config['weight_decay']))
         num_epochs = config['num_epochs']
 
-        # Training code
+        # TODO Put int Training code
 
-        # Validation code
-        val_error = 1
-        run_cost = 1
+        # TODO Put in Validation code
+
+        # val_error = validation error
+        # run_cost = time taken to train
+
         return val_error, run_cost
 
     def eval(self, config, epochs=100):
@@ -150,13 +153,3 @@ class TuneNN(object):
 
         return space
 
-if __name__ == '__main__':
-    from GPyOpt.experiment_design import initial_design
-    from GPyOpt.core.task.space import Design_space
-
-    problem = TuneNN()
-    cs = problem.get_search_space()
-
-    space = Design_space(cs, None)
-
-    X = initial_design('random', space, 10)

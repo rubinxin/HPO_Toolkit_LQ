@@ -14,23 +14,24 @@ import GPyOpt
 from objective_funcs.objective import TuneNN
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--task_name', default="FCNet", type=str, nargs='?', help='specifies the benchmark: nasbench101_cifar10')
-parser.add_argument('--n_iters', default=10, type=int, nargs='?', help='number of iterations for optimization method')
-parser.add_argument('--output_path', default="./results/", type=str, nargs='?',
+parser.add_argument('--task_name', default="FCNet", type=str, help='specifies the target task name')
+parser.add_argument('--bo_method', default="tpe", type=str, help='bo method used: bohb, tpe, gpbo')
+parser.add_argument('--n_iters', default=60, type=int, help='number of iterations for optimization method')
+parser.add_argument('--output_path', default="./results/", type=str,
                     help='specifies the path where the results will be saved')
-parser.add_argument('--data_dir', default="../data/", type=str, nargs='?', help='specifies the path to the tabular data')
+parser.add_argument('--data_dir', default="../data/", type=str, help='specifies the path to the tabular data')
 parser.add_argument('--n_init', type=int, default=10, help='number of initial data')
+parser.add_argument('--seed', type=int, default=42, help='random seed')
 
 args = parser.parse_args()
 
 np.random.seed(args.seed)
 random.seed(args.seed)
 
-args.n_iters = int(args.n_iters+args.n_init)
 
 # define the objective problem
 task_name = args.benchmark.split('_')[-1]
-b = TuneNN(data_dir=args.data_dir, task=task_name, seed=args.fixed_query_seed, metric=args.eval_metric, es_budget=None)
+b = TuneNN(data_dir=args.data_dir, task=task_name, seed=args.seed, bo_method=args.bo_method)
 
 # create the result saving path
 output_dir = os.path.join(args.output_path, args.task_name)
@@ -40,7 +41,7 @@ result_path = os.path.join(output_dir, f"bohb_{args.eval_metric}{args.es_budget}
 
 if args.bo_method == 'bohb':
 
-    # BO strategy A: BOHB
+    # ---- BO strategy A: BOHB ------
 
     # define the search space
     search_space = b.get_configuration_space()
@@ -57,8 +58,8 @@ if args.bo_method == 'bohb':
     hb_run_id = f'{args.seed}'
     min_bandwidth = 0.3
     num_workers = 1
-    min_budget = 12
-    max_budget = 100
+    min_budget = 30
+    max_budget = 90
 
     # initialise BOHB
     NS = hpns.NameServer(run_id=hb_run_id, host='localhost', port=0)
@@ -76,7 +77,7 @@ if args.bo_method == 'bohb':
                 ping_interval=10, min_bandwidth=min_bandwidth)
 
     # run BOHB
-    results = bohb.run(args.n_iters, min_n_workers=num_workers)
+    results = bohb.run(int(args.n_iters+args.n_init), min_n_workers=num_workers)
     bohb.shutdown(shutdown_workers=True)
     NS.shutdown()
 
@@ -98,7 +99,8 @@ if args.bo_method == 'bohb':
     print(f'Best hyperparams={curr_best_hyperparam} with objective value={curr_best}')
 
 elif args.bo_method == 'tpe':
-    # BO strategy B: TPE
+
+    # ------ BO strategy B: TPE ------
 
     # define the search space
     search_space = b.get_search_space()
@@ -108,7 +110,7 @@ elif args.bo_method == 'tpe':
     best_hyperparam = fmin(b.eval,
                 space=search_space,
                 algo=tpe.suggest,
-                max_evals=args.n_iters,
+                max_evals=int(args.n_iters+args.n_init),
                 trials=trials)
     # process the returned results to give the same format
     bo_results = [(item['config'], item['loss']) for item in trials.results]
@@ -116,7 +118,8 @@ elif args.bo_method == 'tpe':
     print(f'Best hyperparams={best_hyperparam} with objective value={best_objective_value}')
 
 elif args.bo_method == 'gpbo':
-    # BO strategy C: GPyOpt
+
+    # ------ BO strategy C: GPyOpt ------
 
     # define the search space
     search_space = b.get_search_space()
@@ -125,7 +128,7 @@ elif args.bo_method == 'gpbo':
     gpyopt = GPyOpt.methods.BayesianOptimization(f=b.eval, domain=search_space,
                                                 initial_design_numdata=args.n_init,
                                                 acquisition_type='EI', model_type='GP',
-                                                model_update_interval=10, verbosity=True,
+                                                model_update_interval=5, verbosity=True,
                                                 normalize_Y=True)
     gpyopt.run_optimization(max_iter=args.n_iters)
 
@@ -135,8 +138,11 @@ elif args.bo_method == 'gpbo':
     best_hyperparam = np.atleast_2d(gpyopt.x_opt)
     best_objective_value = gpyopt.Y_best
 
+    bo_results = []
+    for j, x in enumerate(X_queried):
+        bo_results.append((x, Y_queried[j]))
+
     print(f'Best hyperparams={best_hyperparam} with objective value={best_objective_value}')
 
 
 pickle.dump(bo_results, open(result_path, 'wb'))
-
