@@ -12,11 +12,11 @@ import random
 from copy import deepcopy
 import GPyOpt
 from objective_funcs.objective import TuneNN
-
+from objective_funcs.sync_objective import sync_func
 parser = argparse.ArgumentParser()
-parser.add_argument('--task_name', default="FCNet", type=str, help='specifies the target task name')
+parser.add_argument('--task_name', default="egg", type=str, help='specifies the target task name')
 parser.add_argument('--bo_method', default="tpe", type=str, help='bo method used: bohb, tpe, gpbo')
-parser.add_argument('--n_iters', default=60, type=int, help='number of iterations for optimization method')
+parser.add_argument('--n_iters', default=30, type=int, help='number of iterations for optimization method')
 parser.add_argument('--output_path', default="./results/", type=str,
                     help='specifies the path where the results will be saved')
 parser.add_argument('--data_dir', default="../data/", type=str, help='specifies the path to the tabular data')
@@ -25,18 +25,18 @@ parser.add_argument('--seed', type=int, default=42, help='random seed')
 
 args = parser.parse_args()
 
+print(args)
 np.random.seed(args.seed)
 random.seed(args.seed)
 
-
 # define the objective problem
-task_name = args.benchmark.split('_')[-1]
-b = TuneNN(data_dir=args.data_dir, task=task_name, seed=args.seed, bo_method=args.bo_method)
+# b = TuneNN(data_dir=args.data_dir, task=task_name, seed=args.seed, bo_method=args.bo_method)
+b = sync_func(task=args.task_name, seed=args.seed, bo_method=args.bo_method)
 
 # create the result saving path
 output_dir = os.path.join(args.output_path, args.task_name)
 os.makedirs(output_dir, exist_ok=True)
-result_path = os.path.join(output_dir, f"bohb_{args.eval_metric}{args.es_budget}")
+result_path = os.path.join(output_dir, f"{args.bo_method}s{args.seed}")
 
 
 if args.bo_method == 'bohb':
@@ -129,14 +129,14 @@ elif args.bo_method == 'gpbo':
                                                 initial_design_numdata=args.n_init,
                                                 acquisition_type='EI', model_type='GP',
                                                 model_update_interval=5, verbosity=True,
-                                                normalize_Y=True)
+                                                normalize_Y=False)
     gpyopt.run_optimization(max_iter=args.n_iters)
 
     # process the returned results to give the same format
     Y_queried = gpyopt.Y
     X_queried = gpyopt.X
     best_hyperparam = np.atleast_2d(gpyopt.x_opt)
-    best_objective_value = gpyopt.Y_best
+    best_objective_value = gpyopt.Y_best[-1]
 
     bo_results = []
     for j, x in enumerate(X_queried):
